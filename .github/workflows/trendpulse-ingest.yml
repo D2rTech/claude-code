@@ -1,0 +1,18 @@
+# Triggers TrendPulse's store sync. Only stores that are "due" (>20h since last attempt) are actually fetched,
+# so running this every 6h is cheap and gives failed syncs a retry window.
+# Repo secrets required: TRENDPULSE_URL (e.g. https://my-app.fly.dev) and CRON_SECRET (same value as the app's).
+name: trendpulse-ingest
+on:
+  schedule: [{ cron: "17 */6 * * *" }]
+  workflow_dispatch:
+jobs:
+  ingest:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call ingest endpoint
+        env:
+          URL: ${{ secrets.TRENDPULSE_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          test -n "$URL" && test -n "$CRON_SECRET" || { echo "Set TRENDPULSE_URL and CRON_SECRET repo secrets"; exit 1; }
+          curl --fail-with-body -sS -m 600 -X POST -H "Authorization: Bearer $CRON_SECRET" "${URL%/}/api/cron/ingest"

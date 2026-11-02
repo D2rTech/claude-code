@@ -14,6 +14,7 @@ export default async function Competitors() {
   return (
     <div>
       <h1 className="text-2xl font-bold">Competitors</h1>
+      <p className="mt-2 inline-block rounded-md bg-amber-50 px-2 py-1 text-xs font-medium text-amber-800">Demo data — sample numbers, not real measurements. See “Live stores” for real data.</p>
       <p className="text-sm text-slate-500">Estimated performance of tracked stores, ranked by revenue.</p>
       <div className="card mt-6 overflow-x-auto">
         <table className="w-full min-w-[760px]">

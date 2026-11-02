@@ -17,7 +17,8 @@ storefront (catalog, cart, Stripe checkout, orders, inventory, admin) and a paid
 |---|---|---|
 | Landing | `/` | Hero, features, pricing, FAQ |
 | Auth | `/signup`, `/login` | Email + password (bcrypt), signed HTTP-only JWT cookie |
-| Analytics | `/dashboard`, `/dashboard/competitors`, `/dashboard/trends`, `/dashboard/ads` | **Free** sees top 3 rows; **Pro** sees everything + "why it works" insights. Gating is enforced server-side (locked rows are masked before they reach the browser). |
+| Live stores | `/dashboard/stores` | Real Shopify catalog tracking (see below) |
+| Analytics (demo) | `/dashboard`, `/dashboard/competitors`, `/dashboard/trends`, `/dashboard/ads` | **Free** sees top 3 rows; **Pro** sees everything + "why it works" insights. Gating is enforced server-side (locked rows are masked before they reach the browser). |
 | Billing | `/dashboard/billing` | Stripe Checkout subscription ($29/mo) + customer portal |
 | Storefront | `/shop`, `/shop/[slug]`, `/cart` | Search, categories, sorting, cookie cart, stock checks |
 | Checkout | server action → Stripe Checkout | Order created `pending`, marked `paid` + stock decremented on payment (idempotent) |
@@ -25,8 +26,23 @@ storefront (catalog, cart, Stripe checkout, orders, inventory, admin) and a paid
 | Admin | `/admin`, `/admin/products` | Summary, low-stock, product create/edit, inventory, active flag |
 | Webhook | `POST /api/stripe/webhook` | Signature-verified; handles orders + subscription lifecycle |
 
-### ⚠️ About the analytics data
-The competitor / trend / ad data is **seeded demo data** (deterministic, see `lib/seed-data.ts`). There is no live
+### Live data: store tracking (real)
+**Live stores** (`/dashboard/stores`) is real. Pro users add a Shopify store domain; a crawler reads its public
+`/products.json` about once a day and records **new products, price changes, sell-outs/restocks, removals and relistings**.
+The first sync is a silent baseline, so changes show up from the second sync onward.
+
+- Code: `lib/ingest/` (`net.ts` safe fetcher, `shopify.ts` catalog parser, `sync.ts` diff + scheduler), `lib/stores.ts`, `app/api/cron/ingest/route.ts`.
+- **Scheduling:** `POST /api/cron/ingest` with `Authorization: Bearer $CRON_SECRET` syncs only stores that are due (>20h since last attempt), within a 4-minute budget. Call it every few hours from anything:
+  - GitHub Actions: `.github/workflows/trendpulse-ingest.yml` is included. Add repo secrets `TRENDPULSE_URL` and `CRON_SECRET`.
+  - Or any cron: `curl -X POST -H "Authorization: Bearer $CRON_SECRET" https://your-app/api/cron/ingest`
+  - Locally: set `CRON_SECRET` in `.env.local`, add a store in the UI (it syncs immediately), and use the admin "Sync now" link.
+- **Safety:** because users supply domains, the fetcher is SSRF-hardened: https/443 only, no IP literals, every DNS answer must be a public address (checked at connect time, so DNS rebinding is blocked), bounded redirects/size/time. Pro users are capped at `MAX_STORES_PER_USER`, the whole tracker at `MAX_STORES`.
+- **Limits:** only Shopify stores that leave `/products.json` public (many do; some block it). Up to 10,000 products per store. This shows catalog changes, **not** sales or traffic. A removal or sell-out is a signal, not proof of sales.
+- **Legal/ethical:** crawling is a gray area. Read each target's terms, keep the request rate low (the crawler is sequential per store with a delay), send an honest `INGEST_USER_AGENT` with a contact URL, and honor opt-out requests.
+- Tests: `npm test` (SSRF guard, parser, pagination, and event diffing).
+
+### ⚠️ About the *other* analytics pages
+The Competitors / Trends / Ad library pages (labelled "demo" in the app) are **seeded demo data** (deterministic, see `lib/seed-data.ts`). There is no live
 scraping. To make it real, write to the `competitors`, `trends` and `ads` tables from your own pipeline
 (scrapers, SimilarWeb/Meta Ad Library/other APIs). Schema is in `lib/db.ts`. Revenue/traffic figures are
 illustrative; don't present them as real measurements to customers. Also note the "why it works" insights are
@@ -74,6 +90,8 @@ Even if a webhook is delayed, the success/return pages verify the Checkout Sessi
 | `STRIPE_SECRET_KEY` | no | Enables real payments; blank = demo mode |
 | `STRIPE_WEBHOOK_SECRET` | with Stripe | Signing secret for `/api/stripe/webhook` |
 | `STRIPE_PRO_PRICE_ID` | no | Existing recurring Price ID for Pro |
+| `CRON_SECRET` | for ingestion | Bearer token for `/api/cron/ingest` (endpoint returns 503 if unset) |
+| `INGEST_USER_AGENT`, `MAX_STORES`, `MAX_STORES_PER_USER` | no | Crawler identity and caps |
 
 In production the app refuses to start without `SESSION_SECRET` and `ADMIN_PASSWORD`.
 
@@ -114,7 +132,8 @@ public/         product & collection images (from the Chec demo store)
 ```
 
 ## Known limitations (MVP)
-- Analytics data is demo data (see above). No scraping/ingestion pipeline or admin UI for it yet.
+- Competitors/Trends/Ads pages are still demo data. Only "Live stores" is real, and the crawler has been tested against Shopify's documented JSON format and mocks but **not yet against live stores** (it was built in a network-restricted sandbox). Add one real store and check it before relying on it.
+- Ads, traffic and revenue data have no ingestion yet.
 - No email (receipts, password reset, verification). Add Resend/Postmark if needed.
 - No rate limiting on login/signup; add before public launch (e.g. at your proxy or with Upstash).
 - Cancelling/refunding an order in the admin does not restock inventory or refund via Stripe.

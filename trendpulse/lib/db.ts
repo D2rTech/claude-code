@@ -47,6 +47,25 @@ CREATE TABLE IF NOT EXISTS trends (
   score INTEGER NOT NULL, growth_pct REAL NOT NULL, avg_price INTEGER NOT NULL,
   stores_selling INTEGER NOT NULL, active_ads INTEGER NOT NULL, series TEXT NOT NULL, why TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS stores (
+  id INTEGER PRIMARY KEY AUTOINCREMENT, domain TEXT NOT NULL UNIQUE, name TEXT NOT NULL, niche TEXT NOT NULL DEFAULT '',
+  added_by INTEGER REFERENCES users(id), created_at TEXT NOT NULL,
+  last_synced_at TEXT, last_attempt_at TEXT, last_error TEXT,
+  baselined INTEGER NOT NULL DEFAULT 0, product_count INTEGER NOT NULL DEFAULT 0
+);
+CREATE TABLE IF NOT EXISTS store_products (
+  id INTEGER PRIMARY KEY AUTOINCREMENT, store_id INTEGER NOT NULL REFERENCES stores(id) ON DELETE CASCADE,
+  remote_id TEXT NOT NULL, handle TEXT NOT NULL, title TEXT NOT NULL, vendor TEXT, product_type TEXT, image TEXT,
+  price_cents INTEGER NOT NULL, compare_at_cents INTEGER, available INTEGER NOT NULL DEFAULT 1,
+  published_at TEXT, first_seen_at TEXT NOT NULL, last_seen_at TEXT NOT NULL, removed_at TEXT,
+  UNIQUE(store_id, remote_id)
+);
+CREATE TABLE IF NOT EXISTS store_events (
+  id INTEGER PRIMARY KEY AUTOINCREMENT, store_id INTEGER NOT NULL REFERENCES stores(id) ON DELETE CASCADE,
+  product_id INTEGER REFERENCES store_products(id) ON DELETE CASCADE,
+  type TEXT NOT NULL, old_cents INTEGER, new_cents INTEGER, at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_events_store_at ON store_events(store_id, at);
 CREATE TABLE IF NOT EXISTS ads (
   id INTEGER PRIMARY KEY AUTOINCREMENT, competitor_id INTEGER NOT NULL REFERENCES competitors(id),
   platform TEXT NOT NULL, format TEXT NOT NULL, hook TEXT NOT NULL, copy TEXT NOT NULL,

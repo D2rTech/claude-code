@@ -13,6 +13,7 @@ export default async function Trends() {
   return (
     <div>
       <h1 className="text-2xl font-bold">Trend radar</h1>
+      <p className="mt-2 inline-block rounded-md bg-amber-50 px-2 py-1 text-xs font-medium text-amber-800">Demo data — sample numbers, not real measurements. See “Live stores” for real data.</p>
       <p className="text-sm text-slate-500">Products gaining momentum. Fewer sellers + rising ads = opportunity.</p>
       <div className="mt-6 grid gap-4 md:grid-cols-2">
         {rows.map((t) => {
