@@ -1,0 +1,79 @@
+import Database from "better-sqlite3";
+import fs from "node:fs";
+import path from "node:path";
+import bcrypt from "bcryptjs";
+import { seedAnalytics, seedProducts } from "./seed-data";
+
+const g = globalThis as unknown as { __db?: Database.Database };
+
+const SCHEMA = `
+CREATE TABLE IF NOT EXISTS users (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  email TEXT NOT NULL UNIQUE,
+  password_hash TEXT NOT NULL,
+  role TEXT NOT NULL DEFAULT 'user',
+  plan TEXT NOT NULL DEFAULT 'free',
+  stripe_customer_id TEXT,
+  stripe_subscription_id TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE TABLE IF NOT EXISTS categories (
+  id INTEGER PRIMARY KEY AUTOINCREMENT, slug TEXT NOT NULL UNIQUE, name TEXT NOT NULL, image TEXT
+);
+CREATE TABLE IF NOT EXISTS products (
+  id INTEGER PRIMARY KEY AUTOINCREMENT, slug TEXT NOT NULL UNIQUE, name TEXT NOT NULL,
+  description TEXT NOT NULL DEFAULT '', price_cents INTEGER NOT NULL, image TEXT,
+  category_id INTEGER REFERENCES categories(id), stock INTEGER NOT NULL DEFAULT 0,
+  active INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE TABLE IF NOT EXISTS orders (
+  id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER REFERENCES users(id), email TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending', total_cents INTEGER NOT NULL,
+  stripe_session_id TEXT UNIQUE, created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE TABLE IF NOT EXISTS order_items (
+  id INTEGER PRIMARY KEY AUTOINCREMENT, order_id INTEGER NOT NULL REFERENCES orders(id),
+  product_id INTEGER NOT NULL REFERENCES products(id), name TEXT NOT NULL,
+  unit_cents INTEGER NOT NULL, qty INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS competitors (
+  id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, domain TEXT NOT NULL, niche TEXT NOT NULL,
+  platform TEXT NOT NULL, monthly_visits INTEGER NOT NULL, est_revenue INTEGER NOT NULL,
+  product_count INTEGER NOT NULL, active_ads INTEGER NOT NULL, growth_pct REAL NOT NULL,
+  traffic_series TEXT NOT NULL, top_channel TEXT NOT NULL, avg_price INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS trends (
+  id INTEGER PRIMARY KEY AUTOINCREMENT, product TEXT NOT NULL, niche TEXT NOT NULL,
+  score INTEGER NOT NULL, growth_pct REAL NOT NULL, avg_price INTEGER NOT NULL,
+  stores_selling INTEGER NOT NULL, active_ads INTEGER NOT NULL, series TEXT NOT NULL, why TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS ads (
+  id INTEGER PRIMARY KEY AUTOINCREMENT, competitor_id INTEGER NOT NULL REFERENCES competitors(id),
+  platform TEXT NOT NULL, format TEXT NOT NULL, hook TEXT NOT NULL, copy TEXT NOT NULL,
+  cta TEXT NOT NULL, days_running INTEGER NOT NULL, est_spend INTEGER NOT NULL, engagement INTEGER NOT NULL
+);
+`;
+
+export function db(): Database.Database {
+  if (g.__db) return g.__db;
+  const file = process.env.DATABASE_PATH || path.join(process.cwd(), "data", "app.db");
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  const d = new Database(file);
+  d.pragma("journal_mode = WAL");
+  d.pragma("foreign_keys = ON");
+  d.exec(SCHEMA);
+  bootstrap(d);
+  g.__db = d;
+  return d;
+}
+
+function bootstrap(d: Database.Database) {
+  const email = (process.env.ADMIN_EMAIL || "admin@example.com").toLowerCase();
+  if (!d.prepare("SELECT 1 FROM users WHERE email=?").get(email)) {
+    if (process.env.NODE_ENV === "production" && !process.env.ADMIN_PASSWORD) throw new Error("ADMIN_PASSWORD must be set in production");
+    d.prepare("INSERT INTO users (email,password_hash,role,plan) VALUES (?,?,?,?)").run(
+      email, bcrypt.hashSync(process.env.ADMIN_PASSWORD || "admin12345", 10), "admin", "pro");
+  }
+  if (!d.prepare("SELECT 1 FROM categories LIMIT 1").get()) seedProducts(d);
+  if (!d.prepare("SELECT 1 FROM competitors LIMIT 1").get()) seedAnalytics(d);
+}
