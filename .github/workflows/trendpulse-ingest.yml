@@ -1,7 +1,7 @@
 # Triggers TrendPulse's store sync. Only stores that are "due" (>20h since last attempt) are actually fetched,
 # so running this every 6h is cheap and gives failed syncs a retry window.
 # Repo secrets required: TRENDPULSE_URL (e.g. https://my-app.fly.dev) and CRON_SECRET (same value as the app's).
-name: trendpulse-ingest
+name: trendpulse-ingest # runs the full pipeline: sync → ads → estimates → trending
 on:
   schedule: [{ cron: "17 */6 * * *" }]
   workflow_dispatch:

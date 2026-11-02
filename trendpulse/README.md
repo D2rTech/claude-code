@@ -17,7 +17,8 @@ storefront (catalog, cart, Stripe checkout, orders, inventory, admin) and a paid
 |---|---|---|
 | Landing | `/` | Hero, features, pricing, FAQ |
 | Auth | `/signup`, `/login` | Email + password (bcrypt), signed HTTP-only JWT cookie |
-| Live stores | `/dashboard/stores` | Real Shopify catalog tracking (see below) |
+| Live stores | `/dashboard/stores` | Real Shopify catalog tracking, ads and revenue estimate per store (see below) |
+| Trending products | `/dashboard/trending` | Scored from real tracked-store data, with reasons |
 | Analytics (demo) | `/dashboard`, `/dashboard/competitors`, `/dashboard/trends`, `/dashboard/ads` | **Free** sees top 3 rows; **Pro** sees everything + "why it works" insights. Gating is enforced server-side (locked rows are masked before they reach the browser). |
 | Billing | `/dashboard/billing` | Stripe Checkout subscription ($29/mo) + customer portal |
 | Storefront | `/shop`, `/shop/[slug]`, `/cart` | Search, categories, sorting, cookie cart, stock checks |
@@ -39,7 +40,18 @@ The first sync is a silent baseline, so changes show up from the second sync onw
 - **Safety:** because users supply domains, the fetcher is SSRF-hardened: https/443 only, no IP literals, every DNS answer must be a public address (checked at connect time, so DNS rebinding is blocked), bounded redirects/size/time. Pro users are capped at `MAX_STORES_PER_USER`, the whole tracker at `MAX_STORES`.
 - **Limits:** only Shopify stores that leave `/products.json` public (many do; some block it). Up to 10,000 products per store. This shows catalog changes, **not** sales or traffic. A removal or sell-out is a signal, not proof of sales.
 - **Legal/ethical:** crawling is a gray area. Read each target's terms, keep the request rate low (the crawler is sequential per store with a delay), send an honest `INGEST_USER_AGENT` with a contact URL, and honor opt-out requests.
-- Tests: `npm test` (SSRF guard, parser, pagination, and event diffing).
+- Tests: `npm test` (SSRF guard, parser, pagination, event diffing, ads, estimates, trend scoring).
+
+#### The four jobs
+`POST /api/cron/ingest` runs the whole pipeline in order; add `?job=sync|ads|estimates|trending` to run one. Runs are logged and
+visible (with "Run now" buttons) at **/admin/jobs**. Each job only does due work, so calling it every few hours is cheap.
+
+| Job | What it does | Needs | Honest limits |
+|---|---|---|---|
+| `sync` | Crawls due stores' `/products.json`, records new / price / sold-out / restock / removed events | nothing | Shopify stores with a public catalog only |
+| `ads` | Pulls each store's ads from the Meta Ad Library API, keeps ads whose caption/title/body mention the store's domain, tracks start date, stop date and **longevity** | `META_ADS_ACCESS_TOKEN` (create a Meta developer app and follow Meta's Ad Library API access steps). Skipped cleanly if unset; a token/rate-limit error stops the run and is shown in the UI and job log | As I understand Meta's policy, the API returns ads delivered in the **EU/UK** plus political ads — **not** ordinary US commercial ads, and it gives no spend/impressions for commercial ads. Many stores will show zero ads. Domain matching favours precision over recall. Not yet verified against the live API. |
+| `estimates` | Daily revenue **range** per store: visits × conversion (0.8–3%) × (median price × 1–1.6 items). All constants are in `lib/ingest/estimates.ts` and shown in the UI | A monthly-visits number, entered on the store page by whoever added it (or an admin) | There is no public source for real revenue. This is a rough, assumption-based range and is labelled as such. Plug a traffic provider into `store_job_state.monthly_visits` to automate the input. |
+| `trending` | Scores products 0–100 from real signals — recent launch, sell-out/restock, similar product at other tracked stores, active ads naming the product — and lists the reasons; also category launch momentum | The data above | A heuristic, not sales data. Quality scales with the number of stores tracked (the cross-store signal needs overlap), and scores start appearing after stores have synced twice. |
 
 ### ⚠️ About the *other* analytics pages
 The Competitors / Trends / Ad library pages (labelled "demo" in the app) are **seeded demo data** (deterministic, see `lib/seed-data.ts`). There is no live

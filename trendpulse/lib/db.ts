@@ -66,6 +66,33 @@ CREATE TABLE IF NOT EXISTS store_events (
   type TEXT NOT NULL, old_cents INTEGER, new_cents INTEGER, at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_events_store_at ON store_events(store_id, at);
+CREATE TABLE IF NOT EXISTS store_job_state (
+  store_id INTEGER PRIMARY KEY REFERENCES stores(id) ON DELETE CASCADE,
+  ads_synced_at TEXT, ads_attempt_at TEXT, ads_error TEXT,
+  monthly_visits INTEGER, visits_source TEXT, visits_updated_at TEXT
+);
+CREATE TABLE IF NOT EXISTS store_ads (
+  id INTEGER PRIMARY KEY AUTOINCREMENT, store_id INTEGER NOT NULL REFERENCES stores(id) ON DELETE CASCADE,
+  ad_id TEXT NOT NULL UNIQUE, platforms TEXT, body TEXT, title TEXT, caption TEXT, snapshot_url TEXT,
+  started_at TEXT, stopped_at TEXT, active INTEGER NOT NULL DEFAULT 1, first_seen_at TEXT NOT NULL, last_seen_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_store_ads_store ON store_ads(store_id, active);
+CREATE TABLE IF NOT EXISTS store_estimates (
+  id INTEGER PRIMARY KEY AUTOINCREMENT, store_id INTEGER NOT NULL REFERENCES stores(id) ON DELETE CASCADE,
+  day TEXT NOT NULL, visits INTEGER NOT NULL, aov_low INTEGER NOT NULL, aov_mid INTEGER NOT NULL, aov_high INTEGER NOT NULL,
+  rev_low INTEGER NOT NULL, rev_mid INTEGER NOT NULL, rev_high INTEGER NOT NULL, orders_mid INTEGER NOT NULL, products_used INTEGER NOT NULL,
+  UNIQUE(store_id, day)
+);
+CREATE TABLE IF NOT EXISTS product_trends (
+  product_id INTEGER PRIMARY KEY REFERENCES store_products(id) ON DELETE CASCADE,
+  store_id INTEGER NOT NULL, score INTEGER NOT NULL, prev_score INTEGER, reasons TEXT NOT NULL, stores_selling INTEGER NOT NULL, computed_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS category_trends (
+  product_type TEXT PRIMARY KEY, launches_recent INTEGER NOT NULL, launches_prev INTEGER NOT NULL, stores INTEGER NOT NULL, computed_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS job_runs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT, job TEXT NOT NULL, started_at TEXT NOT NULL, finished_at TEXT, ok INTEGER, summary TEXT
+);
 CREATE TABLE IF NOT EXISTS ads (
   id INTEGER PRIMARY KEY AUTOINCREMENT, competitor_id INTEGER NOT NULL REFERENCES competitors(id),
   platform TEXT NOT NULL, format TEXT NOT NULL, hook TEXT NOT NULL, copy TEXT NOT NULL,

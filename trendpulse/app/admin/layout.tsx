@@ -8,6 +8,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
         <h1 className="text-xl font-bold">Admin</h1>
         <Link href="/admin" className="text-sm text-slate-600 hover:text-slate-900">Summary</Link>
         <Link href="/admin/products" className="text-sm text-slate-600 hover:text-slate-900">Products & inventory</Link>
+        <Link href="/admin/jobs" className="text-sm text-slate-600 hover:text-slate-900">Jobs</Link>
         <Link href="/admin/orders" className="text-sm text-slate-600 hover:text-slate-900">Orders</Link>
       </div>
       {children}

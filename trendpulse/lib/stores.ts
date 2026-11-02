@@ -36,3 +36,21 @@ export function storeProducts(id: number) {
     WHERE store_id=? AND removed_at IS NULL ORDER BY first_seen_at DESC, id DESC LIMIT 48`).all(id) as
     { id: number; title: string; handle: string; image: string | null; price_cents: number; compare_at_cents: number | null; available: number; first_seen_at: string }[];
 }
+
+export type TrendRow = { product_id: number; store_id: number; score: number; prev_score: number | null; reasons: string; stores_selling: number;
+  title: string; image: string | null; price_cents: number; handle: string; domain: string; store_name: string; locked?: boolean };
+
+/** Free users see the top FREE_LIMIT rows; the rest are masked server-side. */
+export function listTrending(user: User): TrendRow[] {
+  const rows = db().prepare(`SELECT t.product_id,t.store_id,t.score,t.prev_score,t.reasons,t.stores_selling,p.title,p.image,p.price_cents,p.handle,s.domain,s.name store_name
+    FROM product_trends t JOIN store_products p ON p.id=t.product_id JOIN stores s ON s.id=t.store_id ORDER BY t.score DESC, t.product_id LIMIT 30`).all() as TrendRow[];
+  return isPro(user) ? rows : rows.map((r, i) => i < FREE_LIMIT ? r : ({ ...r, locked: true, title: "Locked product", image: null, price_cents: 0, handle: "", domain: "upgrade-to-view", store_name: "Locked", reasons: "[]", score: 50, prev_score: null, stores_selling: 1 }));
+}
+export const listCategoryTrends = () => db().prepare("SELECT product_type,launches_recent,launches_prev,stores FROM category_trends ORDER BY launches_recent-launches_prev DESC LIMIT 10").all() as
+  { product_type: string; launches_recent: number; launches_prev: number; stores: number }[];
+export const trendingComputedAt = () => (db().prepare("SELECT MAX(computed_at) c FROM product_trends").get() as { c: string | null }).c;
+
+export type AdRow = { ad_id: string; platforms: string | null; body: string | null; title: string | null; snapshot_url: string | null; started_at: string | null; stopped_at: string | null; active: number };
+export const storeAds = (id: number) => db().prepare("SELECT ad_id,platforms,body,title,snapshot_url,started_at,stopped_at,active FROM store_ads WHERE store_id=? ORDER BY active DESC, started_at ASC LIMIT 30").all(id) as AdRow[];
+export const storeJobState = (id: number) => db().prepare("SELECT ads_synced_at,ads_error,monthly_visits,visits_source FROM store_job_state WHERE store_id=?").get(id) as
+  { ads_synced_at: string | null; ads_error: string | null; monthly_visits: number | null; visits_source: string | null } | undefined;

@@ -7,6 +7,8 @@ import { requireAdmin, requireUser } from "@/lib/auth";
 import { isPro } from "@/lib/analytics";
 import { normalizeDomain } from "@/lib/ingest/net";
 import { runDue, syncStore, type StoreRow } from "@/lib/ingest/sync";
+import { JOBS, runJob, type JobName } from "@/lib/ingest/jobs";
+import { runEstimates } from "@/lib/ingest/estimates";
 import type { FormState } from "./actions";
 
 const MAX_TOTAL = Number(process.env.MAX_STORES || 300);
@@ -46,4 +48,29 @@ export async function removeStore(fd: FormData) {
   db().prepare("DELETE FROM stores WHERE id=?").run(Number(fd.get("storeId")));
   revalidatePath("/dashboard/stores");
   redirect("/dashboard/stores");
+}
+
+export async function setVisits(fd: FormData) {
+  const user = await requireUser("/dashboard/stores");
+  const id = Number(fd.get("storeId"));
+  const s = db().prepare("SELECT added_by FROM stores WHERE id=?").get(id) as { added_by: number | null } | undefined;
+  if (!s || !isPro(user) || (user.role !== "admin" && s.added_by !== user.id)) return;
+  const raw = String(fd.get("visits") ?? "").replace(/[,\s]/g, "");
+  const now = new Date().toISOString();
+  if (raw === "") db().prepare("UPDATE store_job_state SET monthly_visits=NULL WHERE store_id=?").run(id);
+  else {
+    const v = Number(raw);
+    if (!Number.isInteger(v) || v < 100 || v > 2_000_000_000) return;
+    db().prepare(`INSERT INTO store_job_state (store_id,monthly_visits,visits_source,visits_updated_at) VALUES (?,?,'manual',?)
+      ON CONFLICT(store_id) DO UPDATE SET monthly_visits=excluded.monthly_visits, visits_source='manual', visits_updated_at=excluded.visits_updated_at`).run(id, v, now);
+    runEstimates();
+  }
+  revalidatePath(`/dashboard/stores/${id}`);
+}
+
+export async function runJobNow(fd: FormData) {
+  await requireAdmin();
+  const job = String(fd.get("job"));
+  if ((JOBS as readonly string[]).includes(job)) await runJob(job as JobName);
+  revalidatePath("/admin/jobs");
 }

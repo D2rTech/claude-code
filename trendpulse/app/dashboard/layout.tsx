@@ -3,7 +3,7 @@ import { requireUser } from "@/lib/auth";
 import { Badge } from "@/components/Paywall";
 import { isPro } from "@/lib/analytics";
 
-const links = [["/dashboard", "Overview"], ["/dashboard/stores", "Live stores"], ["/dashboard/competitors", "Competitors (demo)"], ["/dashboard/trends", "Trends (demo)"],
+const links = [["/dashboard", "Overview"], ["/dashboard/stores", "Live stores"], ["/dashboard/trending", "Trending products"], ["/dashboard/competitors", "Competitors (demo)"], ["/dashboard/trends", "Trends (demo)"],
   ["/dashboard/ads", "Ad library (demo)"], ["/dashboard/billing", "Billing"], ["/account/orders", "My orders"]];
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
